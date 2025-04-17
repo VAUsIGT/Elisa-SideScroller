@@ -1,0 +1,7 @@
+{
+  "Platforms": [
+    {"X": 0, "Y": 1040, "Width": 4000, "Height": 10, "Type": "ground"},
+    {"X": 0, "Y": 0, "Width": 2000, "Height": 20, "Type": "wood"},
+    {"X": 0, "Y": 2000, "Width": 1500, "Height": 20, "Type": "stone"}
+  ]
+}
