@@ -1,7 +1,103 @@
 {
   "Platforms": [
-    {"X": 0, "Y": 1040, "Width": 4000, "Height": 10, "Type": "ground"},
-    {"X": 0, "Y": 0, "Width": 2000, "Height": 20, "Type": "wood"},
-    {"X": 0, "Y": 2000, "Width": 1500, "Height": 20, "Type": "stone"}
+    {
+      "X": 0,
+      "Y": 995,
+      "Width": 4500,
+      "Height": 50,
+      "Type": "ground"
+    },
+    {
+      "X": 440,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "left_border"
+    },
+    {
+      "X": 4460,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "right_border"
+    }
+  ],
+  "Entities": [
+    { //коробка
+      "X": 1000,
+      "Y": 938,
+      "Width": 60,
+      "Height": 60,
+      "Texture": "crate/crate.png",
+      "IsDestructible": true,
+      "IsCollidable": true,
+      "ZIndex": 150,
+      "DestructionSound": "destroy.wav",
+      "Drops": [
+        {
+          "Texture": "speed_potion.png",
+          "Count": 1,
+          "Chance": 1.0
+        },
+        {
+          "Texture": "health_potion.png",
+          "Count": 1,
+          "Chance": 0.3
+        }
+      ]
+    },
+    { //коробка 2
+      "X": 1800,
+      "Y": 938,
+      "Width": 60,
+      "Height": 60,
+      "Texture": "crate/crate.png",
+      "IsDestructible": true,
+      "IsCollidable": true,
+      "ZIndex": 150,
+      "DestructionSound": "destroy.wav",
+      "Drops": [
+        {
+          "Texture": "speed_potion.png",
+          "Count": 1,
+          "Chance": 1.0
+        },
+        {
+          "Texture": "health_potion.png",
+          "Count": 1,
+          "Chance": 0.3
+        }
+      ]
+    },
+    { //дом
+      "X": 1200,
+      "Y": 588,
+      "Width": 330,
+      "Height": 420,
+      "Texture": "home/home.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    }
+  ],
+  "Enemies": [
+    {
+      "Type": "skeleton",
+      "X": 1000,
+      "Y": 845,
+      "Width": 60,
+      "Height": 90,
+      "Speed": 2.5,
+      "Damage": 15,
+      "Health": 100,
+      "AttackRange": 40,
+      "DetectionRange": 600,
+      "AttackCooldown": 1.5,
+      "Animations": {
+        "idle": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\idle.png",
+        "run": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\run.png",
+        "attack": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\attack.png"
+      }
+    }
   ]
 }
