@@ -1,4 +1,4 @@
-# Elisa-SideScroller
+# Emaha-SideScroller
 Game on C#
 
 <a href="https://ibb.co/xtRtRKhc"><img src="https://i.ibb.co/gLBLBbyX/image-4.png" alt="image-4" border="0"></a>
