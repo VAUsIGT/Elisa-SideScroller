@@ -1,0 +1,57 @@
+{
+  "Layers": [
+    {
+      "Texture": "BG1\\bg_layer8.png",
+      "Speed": 0,
+      "ZIndex": -110
+    },
+    {
+      "Texture": "BG1\\bg_layer9.png",
+      "Speed": -0.4,
+      "ZIndex": -100,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG1\\bg_layer7.png",
+      "Speed": -0.2,
+      "ZIndex": -90,
+      "TileCount": 4
+    },
+    {
+      "Texture": "BG1\\bg_layer3.png",
+      "Speed": -0.3,
+      "ZIndex": -80,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG1\\bg_layer6.png",
+      "Speed": -0.1,
+      "ZIndex": -70,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG1\\bg_layer2.png",
+      "Speed": -0.2,
+      "ZIndex": -60,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG1\\bg_layer5.png",
+      "Speed": -0.18,
+      "ZIndex": -50,
+      "TileCount": 4
+    },
+    {
+      "Texture": "BG1\\bg_layer1.png",
+      "Speed": 0,
+      "ZIndex": -40,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG1\\bg_layer4.png",
+      "Speed": 0,
+      "ZIndex": 500,
+      "TileCount": 6
+    }
+  ]
+}

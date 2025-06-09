@@ -1,0 +1,33 @@
+{
+  "Layers": [
+    {
+      "Texture": "BG5\\1.png",
+      "Speed": -0.4,
+      "ZIndex": -110
+    },
+    {
+      "Texture": "BG5\\2.png",
+      "Speed": -0.25,
+      "ZIndex": -100,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG5\\3.png",
+      "Speed": -0.1,
+      "ZIndex": -90,
+      "TileCount": 4
+    },
+    {
+      "Texture": "BG5\\4.png",
+      "Speed": 0,
+      "ZIndex": -80,
+      "TileCount": 6
+    },
+    {
+      "Texture": "BG5\\5.png",
+      "Speed": 0.1,
+      "ZIndex": 500,
+      "TileCount": 6
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "Layers": [
+    {
+      "Texture": "BG4\\Battleground1.png",
+      "Speed": -0.4,
+      "ZIndex": -100,
+      "TileCount": 6
+    }
+  ]
+}
