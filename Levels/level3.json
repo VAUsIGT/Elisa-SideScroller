@@ -1,0 +1,50 @@
+{
+  "BackgroundConfig": "BG5\\bg5.json",
+  "Platforms": [
+    {
+      "X": 0,
+      "Y": 995,
+      "Width": 4500,
+      "Height": 50,
+      "Type": "ground"
+    },
+    {
+      "X": 440,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "left_border"
+    },
+    {
+      "X": 4460,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "right_border"
+    }
+  ],
+  "Entities": [
+    { //указатель
+      "X": 600,
+      "Y": 966,
+      "Width": 22,
+      "Height": 31,
+      "Texture": "others/sign.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //указатель перехода
+      "X": 4400,
+      "Y": 966,
+      "Width": 22,
+      "Height": 31,
+      "IsLevelExit": true,
+      "IsCollidable": false,
+      "Texture": "others/sign.png",
+      "ZIndex": 50
+    }
+  ],
+  "Enemies": [
+  ]
+}

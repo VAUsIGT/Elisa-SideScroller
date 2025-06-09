@@ -1,0 +1,100 @@
+{
+  "skeleton": {
+    "SpriteWidth": 224,
+    "SpriteHeight": 160,
+    "HitboxWidth": 60,
+    "HitboxHeight": 92,
+    "Speed": 2.5,
+    "Damage": 8,
+    "Health": 80,
+    "AttackRange": 60,
+    "DetectionRange": 600,
+    "AttackCooldown": 0.56,
+    "Animations": {
+      "idle": {
+        "Texture": "Enemies\\skeleton\\idle.png",
+        "FrameWidth": 112,
+        "FrameHeight": 80,
+        "FramesCount": 5,
+        "FrameDuration": 0.12
+      },
+      "run": {
+        "Texture": "Enemies\\skeleton\\run.png",
+        "FrameWidth": 112,
+        "FrameHeight": 80,
+        "FramesCount": 6,
+        "FrameDuration": 0.1
+      },
+      "attack": {
+        "Texture": "Enemies\\skeleton\\attack.png",
+        "FrameWidth": 112,
+        "FrameHeight": 80,
+        "FramesCount": 8,
+        "FrameDuration": 0.07
+      },
+      "hit": {
+        "Texture": "Enemies\\skeleton\\hit.png",
+        "FrameWidth": 112,
+        "FrameHeight": 80,
+        "FramesCount": 8,
+        "FrameDuration": 0.07
+      },
+      "dead": {
+        "Texture": "Enemies\\skeleton\\dead.png",
+        "FrameWidth": 112,
+        "FrameHeight": 80,
+        "FramesCount": 13,
+        "FrameDuration": 0.1
+      }
+    }
+  },
+  "spider": {
+    "SpriteWidth": 224,
+    "SpriteHeight": 160,
+    "HitboxWidth": 60,
+    "HitboxHeight": 92,
+    "Speed": 3.5,
+    "Damage": 15,
+    "Health": 40,
+    "AttackRange": 40,
+    "DetectionRange": 400,
+    "AttackCooldown": 0.5,
+    "Animations": {
+      "idle": {
+        "Texture": "Enemies\\spider\\idle.png",
+        "FrameWidth": 80,
+        "FrameHeight": 80,
+        "FramesCount": 6,
+        "FrameDuration": 0.12
+      },
+      "run": {
+        "Texture": "Enemies\\spider\\run.png",
+        "FrameWidth": 80,
+        "FrameHeight": 80,
+        "FramesCount": 8,
+        "FrameDuration": 0.1
+      },
+      "attack": {
+        "Texture": "Enemies\\spider\\attack.png",
+        "FrameWidth": 80,
+        "FrameHeight": 80,
+        "FramesCount": 5,
+        "FrameDuration": 0.1
+      },
+      "hit": {
+        "Texture": "Enemies\\spider\\hit.png",
+        "FrameWidth": 80,
+        "FrameHeight": 80,
+        "FramesCount": 8,
+        "FrameDuration": 0.07
+      },
+      "dead": {
+        "Texture": "Enemies\\spider\\dead.png",
+        "FrameWidth": 80,
+        "FrameHeight": 80,
+        "FramesCount": 3,
+        "FrameDuration": 0.2
+      }
+    }
+  }
+}

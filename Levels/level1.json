@@ -1,4 +1,5 @@
 {
+  "BackgroundConfig": "BG1\\bg1.json",
   "Platforms": [
     {
       "X": 0,
@@ -28,21 +29,21 @@
       "Y": 938,
       "Width": 60,
       "Height": 60,
-      "Texture": "crate/crate.png",
+      "Texture": "crate/crate390x390low.png",
       "IsDestructible": true,
       "IsCollidable": true,
       "ZIndex": 150,
       "DestructionSound": "destroy.wav",
       "Drops": [
         {
-          "Texture": "speed_potion.png",
+          "Texture": "stamina_potion.png",
           "Count": 1,
           "Chance": 1.0
         },
         {
           "Texture": "health_potion.png",
           "Count": 1,
-          "Chance": 0.3
+          "Chance": 1
         }
       ]
     },
@@ -51,7 +52,7 @@
       "Y": 938,
       "Width": 60,
       "Height": 60,
-      "Texture": "crate/crate.png",
+      "Texture": "crate/crate390x390low.png",
       "IsDestructible": true,
       "IsCollidable": true,
       "ZIndex": 150,
@@ -61,43 +62,110 @@
           "Texture": "speed_potion.png",
           "Count": 1,
           "Chance": 1.0
-        },
-        {
-          "Texture": "health_potion.png",
-          "Count": 1,
-          "Chance": 0.3
         }
       ]
     },
     { //дом
-      "X": 1200,
+      "X": 550,
       "Y": 588,
       "Width": 330,
       "Height": 420,
-      "Texture": "home/home.png",
+      "Texture": "home/homelow.png",
       "IsDestructible": false,
       "IsCollidable": false,
       "ZIndex": 50
+    },
+    { //ограда
+      "X": 700,
+      "Y": 910,
+      "Width": 192,
+      "Height": 128,
+      "Texture": "fence/fence7low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 210
+    },
+    { //ограда2
+      "X": 845,
+      "Y": 910,
+      "Width": 192,
+      "Height": 128,
+      "Texture": "fence/fence7low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 210
+    },
+    { //ограда 3
+      "X": 990,
+      "Y": 910,
+      "Width": 192,
+      "Height": 128,
+      "Texture": "fence/fence7low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 210
+    },
+    { //ограда 4 камень
+      "X": 1745,
+      "Y": 895,
+      "Width": 192,
+      "Height": 128,
+      "Texture": "fence/fence6low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 90
+    },
+    { //развалина
+      "X": 3100,
+      "Y": 760,
+      "Width": 280,
+      "Height": 280,
+      "Texture": "home/home61low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": -45
+    },
+    { //скала
+      "X": 4250,
+      "Y": 855,
+      "Width": 303,
+      "Height": 162,
+      "Texture": "Rocks/middle_lane_rock2_1.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 110
+    },
+    { // перенос
+      "X": 4400,
+      "Y": 900,
+      "Width": 100,
+      "Height": 100,
+      "IsLevelExit": true,
+      "IsCollidable": false,
+      "Texture": "home/home.png",
+      "ZIndex": 40
     }
   ],
   "Enemies": [
     {
       "Type": "skeleton",
-      "X": 1000,
-      "Y": 845,
-      "Width": 60,
-      "Height": 90,
-      "Speed": 2.5,
-      "Damage": 15,
-      "Health": 100,
-      "AttackRange": 40,
-      "DetectionRange": 600,
-      "AttackCooldown": 1.5,
-      "Animations": {
-        "idle": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\idle.png",
-        "run": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\run.png",
-        "attack": "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Enemies\\skeleton\\attack.png"
-      }
+      "X": 1300,
+      "Y": 845
+    },
+    {
+      "Type": "spider",
+      "X": 2000,
+      "Y": 845
+    },
+    {
+      "Type": "skeleton",
+      "X": 2600,
+      "Y": 845
+    },
+    {
+      "Type": "skeleton",
+      "X": 2900,
+      "Y": 845
     }
   ]
 }

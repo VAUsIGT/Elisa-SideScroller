@@ -1,0 +1,196 @@
+{
+  "BackgroundConfig": "BG1\\bg1.json",
+  "Platforms": [
+    {
+      "X": 0,
+      "Y": 995,
+      "Width": 4500,
+      "Height": 50,
+      "Type": "ground"
+    },
+    {
+      "X": 440,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "left_border"
+    },
+    {
+      "X": 4460,
+      "Y": -5,
+      "Width": 50,
+      "Height": 1000,
+      "Type": "right_border"
+    }
+  ],
+  "Entities": [
+    { //коробка
+      "X": 1735,
+      "Y": 957,
+      "Width": 60,
+      "Height": 42,
+      "Texture": "crate/crate390x270low.png",
+      "IsDestructible": true,
+      "IsCollidable": true,
+      "ZIndex": 150,
+      "DestructionSound": "destroy.wav",
+      "Drops": [
+        {
+          "Texture": "health_potion.png",
+          "Count": 1,
+          "Chance": 1
+        }
+      ]
+    },
+    { //коробка 2
+      "X": 1800,
+      "Y": 938,
+      "Width": 60,
+      "Height": 60,
+      "Texture": "crate/crate390x390low.png",
+      "IsDestructible": true,
+      "IsCollidable": true,
+      "ZIndex": 150,
+      "DestructionSound": "destroy.wav",
+      "Drops": [
+        {
+          "Texture": "stamina_potion.png",
+          "Count": 1,
+          "Chance": 1.0
+        }
+      ]
+    },
+    { //указатель
+      "X": 600,
+      "Y": 966,
+      "Width": 22,
+      "Height": 31,
+      "Texture": "others/sign.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 1000,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 1300,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 1600,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 1900,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 2200,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 2500,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 2800,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //лампа
+      "X": 3100,
+      "Y": 940,
+      "Width": 23,
+      "Height": 57,
+      "Texture": "lamp/lamp.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //дом
+      "X": 3500,
+      "Y": 745,
+      "Width": 384,
+      "Height": 256,
+      "Texture": "home/home2low.png",
+      "IsDestructible": false,
+      "IsCollidable": false,
+      "ZIndex": 50
+    },
+    { //указатель перехода
+      "X": 4400,
+      "Y": 966,
+      "Width": 22,
+      "Height": 31,
+      "IsLevelExit": true,
+      "IsCollidable": false,
+      "Texture": "others/sign.png",
+      "ZIndex": 50
+    }
+  ],
+  "Enemies": [
+    {
+      "Type": "skeleton",
+      "X": 3200,
+      "Y": 845
+    },
+    {
+      "Type": "skeleton",
+      "X": 3300,
+      "Y": 845
+    },
+    {
+      "Type": "skeleton",
+      "X": 2600,
+      "Y": 845
+    },
+    {
+      "Type": "skeleton",
+      "X": 2900,
+      "Y": 845
+    }
+  ]
+}

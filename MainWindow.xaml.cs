@@ -14,6 +14,10 @@ using System.Windows.Threading;
 using System.Reflection.Emit;
 using System.Media;
 using System.Windows.Media.Media3D;
+using System.Reflection;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace WpfGame
 {
@@ -21,14 +25,15 @@ namespace WpfGame
     {
         private SoundManager soundManager;
         private BackgroundManager backgroundManager;
-        private Player player;
+        private MediaPlayer menuMusicPlayer = new MediaPlayer();
+        public Player player;
         private List<Entity> entities = new List<Entity>();
         private List<Platform> platforms = new List<Platform>();
         private List<ParallaxLayer> parallaxLayers = new List<ParallaxLayer>();
         private GameTimer gameTimer;
         private Level currentLevel;
         private List<Item> items = new List<Item>();
-        private List<Enemy> enemies = new List<Enemy>();
+        public List<Enemy> enemies = new List<Enemy>();
 
         // настройки камеры
         private double CameraZoom = 2.0; // Увеличение в 2 раза
@@ -38,28 +43,156 @@ namespace WpfGame
         private const double CameraFollowSpeed = 0.1;
         private Rect levelBounds = new Rect(0, 0, 4000, 800); // Границы уровня
 
+        private bool isLevelUpOpen;
+        private int pendingSkillPoints;
+
+        private LevelExit levelExit;
+        private int currentLevelNumber = 1;
+        private bool isTransitioning;
+        private bool GameStarted = false;
+
         public MainWindow()
         {
             InitializeComponent();
-            Loaded += MainWindow_Loaded;
+            InitializeMenu();
+            //Loaded += MainWindow_Loaded;
+        }
+
+        private void InitializeMenu()
+        {
+            // Показываем меню и скрываем игровые элементы
+            MainMenu.Visibility = Visibility.Visible;
+            GameCanvas.Visibility = Visibility.Collapsed;
+            UiCanvas.Visibility = Visibility.Collapsed;
+            BlackOverlay.Visibility = Visibility.Collapsed;
+            DeathOverlay.Visibility = Visibility.Collapsed;
+            DeathText.Visibility = Visibility.Collapsed;
+
+            // Загрузка и воспроизведение музыки меню
+            string menuMusicPath = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "menu.mp3"
+            );
+            if (File.Exists(menuMusicPath))
+            {
+                menuMusicPlayer.Open(new Uri(menuMusicPath));
+                menuMusicPlayer.MediaEnded += (s, e) =>
+                {
+                    menuMusicPlayer.Position = TimeSpan.Zero;
+                    menuMusicPlayer.Play();
+                };
+                menuMusicPlayer.Play();
+            }
+        }
+
+        private void StartNewGame_Click(object sender, RoutedEventArgs e)
+        {
+            // остановка фоновой
+            menuMusicPlayer.Stop();
+            // Скрываем меню
+            MainMenu.Visibility = Visibility.Collapsed;
+            GameStarted = true;
+
+            // Инициализируем игру
+            try
+            {
+                BlackOverlay.Visibility = Visibility.Visible;
+                DeathOverlay.Visibility = Visibility.Visible;
+                DeathText.Visibility = Visibility.Visible;
+                WatermarkText.Visibility = Visibility.Collapsed;
+
+                soundManager = new SoundManager();
+                soundManager.PlayBackground();
+                InitializeCamera();
+                InitializeGame();
+                InitializePlayer();
+                LoadLevel(currentLevelNumber);
+                LoadGameAssets();
+
+                // Запускаем анимацию и игровой цикл
+                Dispatcher.BeginInvoke(
+                    new Action(() =>
+                {
+                    StartFadeInAnimation();
+                    StartGameLoop();
+                    GameCanvas.Visibility = Visibility.Visible;
+                    UiCanvas.Visibility = Visibility.Visible;
+                }), DispatcherPriority.Loaded);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка инициализации: {ex.Message}");
+                Close();
+            }
+        }
+
+        private void Exit_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+
+        private void WatermarkText_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://github.com/VAUsIGT",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при открытии ссылки: {ex.Message}");
+            }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
+                BlackOverlay.Visibility = Visibility.Visible;
+
                 soundManager = new SoundManager();
                 soundManager.PlayBackground();
                 InitializeCamera();
-                LoadGameAssets();
                 InitializeGame();
-                StartGameLoop();
+                InitializePlayer(); 
+                // Загрузка первого уровня перед загрузкой ресурсов
+                LoadLevel(currentLevelNumber);
+                LoadGameAssets();
+                // Запускаем анимацию после полной загрузки
+                Dispatcher.BeginInvoke(
+                    new Action(() =>
+                    {
+                    StartFadeInAnimation();
+                    StartGameLoop();
+                    }),
+                    DispatcherPriority.Loaded
+                );
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error initializing game: {ex.Message}");
                 Close();
             }
+        }
+
+        private void LoadLevel(int levelNumber)
+        {
+            string levelPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Levels",
+    $"level{levelNumber}.json"
+);
+
+            if (!File.Exists(levelPath))
+            {
+                throw new FileNotFoundException($"Level file not found: {levelPath}");
+            }
+
+            string levelJson = File.ReadAllText(levelPath);
+            currentLevel = JsonConvert.DeserializeObject<Level>(levelJson) ?? CreateDefaultLevel();
         }
 
         private void InitializeCamera()
@@ -76,44 +209,22 @@ namespace WpfGame
 
         private void LoadGameAssets()
         {
-            // Загрузка уровня
-            string levelPath = "C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Levels\\level1.json";
-            if (!File.Exists(levelPath))
-            {
-                throw new FileNotFoundException($"Level file not found: {levelPath}");
-            }
+            // Обновляем размер затемнения
+            BlackOverlay.Width = ActualWidth;
+            BlackOverlay.Height = ActualHeight;
 
-            string levelJson = File.ReadAllText(levelPath);
-            currentLevel = JsonConvert.DeserializeObject<Level>(levelJson)
-                          ?? CreateDefaultLevel();
+            // Загрузка фона
+            string bgConfigPath = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Assets\\Backgrounds",
+                currentLevel.BackgroundConfig
+            );
 
-            // Инициализация параллакса
-            parallaxLayers.Add(new ParallaxLayer("bg_layer9.png", 0));//стволы фон     005
-            parallaxLayers.Add(new ParallaxLayer("bg_layer7.png", 0));//свет передний  015
-            parallaxLayers.Add(new ParallaxLayer("bg_layer3.png", 0));//стволы задние   02
-            parallaxLayers.Add(new ParallaxLayer("bg_layer6.png", 0));//свет задний     01
-            parallaxLayers.Add(new ParallaxLayer("bg_layer2.png", 0));//стволы передние 05
-            parallaxLayers.Add(new ParallaxLayer("bg_layer5.png", 0));//кроны          055
-            parallaxLayers.Add(new ParallaxLayer("bg_layer1.png", 0));//трава задняя -0.8  08
-            parallaxLayers.Add(new ParallaxLayer("bg_layer4.png", 0));//трава передняя  07
+            backgroundManager.LoadBackground(bgConfigPath);
 
-
-            // Загрузка спрайт-листов
-            var idleSprite = LoadSprite("player_idle.png");
-            var runSprite = LoadSprite("player_run.png");
-            var jumpSprite = LoadSprite("player_jump.png");
-            var attackSprite = LoadSprite("player_attack.png");
-
-            // Инициализация анимаций
-            var animations = new Dictionary<string, Animation>
-            {
-                {"idle", new Animation(idleSprite, 64, 80, 4, 0.1)},
-                {"run", new Animation(runSprite, 80, 80, 8, 0.08)},
-                {"jump", new Animation(jumpSprite, 80, 80, 8, 1.15)},
-                {"attack", new Animation(attackSprite, 96, 80, 8, 0.07)}
-            };
-
-            player = new Player(new Point(640, 360 - 300), animations, soundManager, items, GameCanvas); // Смещение на 300px вверх
+            player.Position = new Point(640, 360 + 550);
+            player.UpdatePosition();
+            player.ResetState();
 
             // Создание платформ
             if (currentLevel.Platforms == null)
@@ -129,7 +240,7 @@ namespace WpfGame
                     platformData.Type
                 );
                 platforms.Add(platform);
-                //GameCanvas.Children.Add(platform.HitboxVisual); // Добавляем хитбокс
+                GameCanvas.Children.Add(platform.HitboxVisual); // Добавляем хитбокс
             }
             // Загрузка Entity
             if (currentLevel.Entities == null)
@@ -139,7 +250,12 @@ namespace WpfGame
 
             foreach (var entityData in currentLevel.Entities)
             {
-                string texturePath = $"C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Entities\\{entityData.Texture}";
+                string texturePath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Entities",
+    entityData.Texture
+);
                 var entity = new Entity(
                     new Rect(entityData.X, entityData.Y, entityData.Width, entityData.Height),
                     texturePath,
@@ -151,86 +267,282 @@ namespace WpfGame
                 );
                 entities.Add(entity);
                 GameCanvas.Children.Add(entity.Image);
-                //GameCanvas.Children.Add(entity.HitboxVisual); // Добавляем хитбокс
+                GameCanvas.Children.Add(entity.HitboxVisual); // Добавляем хитбокс
             }
 
-            // Загрузка врагов
-            if (currentLevel.Enemies == null)
+            // Загрузка шаблонов врагов
+            string templatesPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Data",
+    "enemy_templates.json"
+);
+            if (!File.Exists(templatesPath))
             {
-                currentLevel.Enemies = new List<EnemyData>();
+                throw new FileNotFoundException($"Enemy templates file not found: {templatesPath}");
             }
 
-            foreach (var enemyData in currentLevel.Enemies)
+            string templatesJson = File.ReadAllText(templatesPath);
+            var enemyTemplates = JsonConvert.DeserializeObject<Dictionary<string, EnemyData>>(templatesJson);
+
+            // Создание врагов
+            foreach (var enemyInLevel in currentLevel.Enemies)
             {
-                var animationse = new Dictionary<string, Animation>();
-                foreach (var anim in enemyData.Animations)
+                if (!enemyTemplates.TryGetValue(enemyInLevel.Type, out var template))
                 {
-                    var sprite = LoadEnemySprite(anim.Value);
-                    var animation = CreateEnemyAnimation(sprite, anim.Key);
+                    MessageBox.Show($"Enemy template {enemyInLevel.Type} not found!");
+                    continue;
+                }
+
+                // Создаем анимации из шаблона
+                var animationse = new Dictionary<string, Animation>();
+                foreach (var anim in template.Animations)
+                {
+                    var animation = CreateEnemyAnimation(anim.Value);
                     animationse.Add(anim.Key.ToLower(), animation);
                 }
 
+                // Создаем врага с параметрами из шаблона
                 var enemy = new Enemy(
-                    new Point(enemyData.X + enemyData.Width / 2, enemyData.Y + enemyData.Height / 2),
+                    new Point(enemyInLevel.X, enemyInLevel.Y),
                     animationse,
-                    "idle"
+                    "idle",
+                    template.SpriteWidth,
+                    template.SpriteHeight,
+                    template.HitboxWidth,
+                    template.HitboxHeight,
+                    template.Speed,
+                    template.Damage,
+                    template.Health,
+                    template.AttackRange,
+                    template.DetectionRange,
+                    template.AttackCooldown,
+                    player
                 );
 
                 enemies.Add(enemy);
                 enemy.AddToCanvas(GameCanvas);
             }
+            // Загрузка перехода между уровнями
+            var exitEntity = currentLevel.Entities.FirstOrDefault(e => e.IsLevelExit);
+            if (exitEntity != null)
+            {
+                levelExit = new LevelExit(new Rect(exitEntity.X, exitEntity.Y, exitEntity.Width, exitEntity.Height));
+                GameCanvas.Children.Add(levelExit.Visual);
+            }
         }
+
+        private void InitializePlayer()
+        {
+            // Загрузка спрайт-листов
+            var idleSprite = LoadSprite("player_idle.png");
+            var runSprite = LoadSprite("player_run.png");
+            var jumpSprite = LoadSprite("player_jump.png");
+            var attackSprite = LoadSprite("player_attack.png");
+            var deadSprite = LoadSprite("player_dead.png");
+
+            // Инициализация анимаций
+            var animations = new Dictionary<string, Animation>
+            {
+                {"idle", new Animation(idleSprite, 64, 80, 4, 0.1)},
+                {"run", new Animation(runSprite, 80, 80, 8, 0.08)},
+                {"jump", new Animation(jumpSprite, 80, 80, 8, 1.15)},
+                {"attack", new Animation(attackSprite, 96, 80, 8, 0.0625)},
+                {"dead", new Animation(deadSprite, 80, 50, 8, 0.1)}
+            };
+
+            player = new Player(new Point(640, 360 + 550), animations, soundManager, items, GameCanvas); // Смещение на 500px вниз (изначально высоко спавн)
+        }
+
+        private void StartFadeOut()
+        {
+            if (isTransitioning) return;
+            isTransitioning = true;
+
+            var fadeAnimation = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = TimeSpan.FromSeconds(1),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+
+            LoadNextLevel();
+            BlackOverlay.BeginAnimation(OpacityProperty, fadeAnimation);
+        }
+
+        private async void LoadNextLevel()
+        {
+            // запуск затемнения
+            StartFadeOutAnimation();
+            // ожидание завершения
+            await Task.Delay(1500);
+            // сохраняем прогресс
+            var savedPlayer = new
+            {
+                Level = player.Level,
+                Experience = player.Experience,
+                Health = player.Health,
+                BaseMaxHealth = player.BaseMaxHealth,
+                BaseMaxStamina = player.BaseMaxStamina,
+                BaseDamage = player.BaseDamage,
+                BaseSpeed = player.BaseSpeed,
+                AvailableSkillPoints = player.AvailableSkillPoints,
+                MainItem = player.MainItem,
+                SecondaryItem = player.SecondaryItem
+            };
+            // очистка уровня
+            ClearCurrentLevel();
+
+            // загрузка уровня
+            currentLevelNumber++;
+            LoadLevel(currentLevelNumber);
+            LoadGameAssets();
+            // восстановление прогресса
+            player.Level = savedPlayer.Level;
+            player.Experience = savedPlayer.Experience;
+            player.Health = savedPlayer.Health;
+            player.BaseMaxHealth = savedPlayer.BaseMaxHealth;
+            player.BaseMaxStamina = savedPlayer.BaseMaxStamina;
+            player.BaseDamage = savedPlayer.BaseDamage;
+            player.BaseSpeed = savedPlayer.BaseSpeed;
+            player.AvailableSkillPoints = savedPlayer.AvailableSkillPoints;
+            player.MainItem = savedPlayer.MainItem;
+            player.SecondaryItem = savedPlayer.SecondaryItem;
+            // перезагрузка ресурсов
+            //LoadGameAssets();                                //////////////////////////////////////// вернуть мб
+
+            // запуск анимации появления
+            StartFadeInAnimation();
+            isTransitioning = false;
+        }
+
+        private void StartFadeInAnimation()
+        {
+            BlackOverlay.Visibility = Visibility.Visible;
+            var fadeAnimation = new DoubleAnimation
+            {
+                From = 1.0,
+                To = 0.0,
+                Duration = TimeSpan.FromSeconds(5),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            fadeAnimation.Completed += (s, e) =>
+            {
+                BlackOverlay.Visibility = Visibility.Collapsed;
+            };
+
+            BlackOverlay.BeginAnimation(OpacityProperty, fadeAnimation);
+        }
+        private void StartFadeOutAnimation()
+        {
+            BlackOverlay.Visibility = Visibility.Visible;
+            var fadeAnimation = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = TimeSpan.FromSeconds(2),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            fadeAnimation.Completed += (s, e) =>
+            {
+                BlackOverlay.Visibility = Visibility.Visible;
+            };
+
+            BlackOverlay.BeginAnimation(OpacityProperty, fadeAnimation);
+        }
+
+        private void ClearCurrentLevel()
+        {
+            // Удаление врагов
+            foreach (var enemy in enemies.ToArray())
+            {
+                enemy.RemoveFromCanvas(GameCanvas);
+                enemies.Remove(enemy);
+            }
+            enemies.Clear();
+
+            // Удаление объектов
+            foreach (var entity in entities)
+            {
+                GameCanvas.Children.Remove(entity.Image);
+                GameCanvas.Children.Remove(entity.HitboxVisual);
+            }
+            entities.Clear();
+
+            // Удаление платформ
+            foreach (var platform in platforms)
+            {
+                GameCanvas.Children.Remove(platform.HitboxVisual);
+            }
+            platforms.Clear();
+
+            // Очистка предметов
+            foreach (var item in items)
+            {
+                GameCanvas.Children.Remove(item.Image);
+                GameCanvas.Children.Remove(item.HitboxVisual);
+            }
+            items.Clear();
+
+            if (levelExit != null)
+            {
+                GameCanvas.Children.Remove(levelExit.Visual);
+                levelExit = null;
+            }
+        }
+
         private BitmapImage LoadEnemySprite(string filename)
         {
             string fullPath = filename;
             return new BitmapImage(new Uri(fullPath));
         }
 
-        private Animation CreateEnemyAnimation(BitmapImage sprite, string animationType)
+        private Animation CreateEnemyAnimation(EnemyAnimationData animData)
         {
-            switch (animationType.ToLower())
+            var sprite = LoadEnemySprite(System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    animData.Texture
+));
+            return new Animation(
+                sprite,
+                animData.FrameWidth,
+                animData.FrameHeight,
+                animData.FramesCount,
+                animData.FrameDuration
+            )
             {
-                case "idle":
-                    return new Animation(sprite, 112, 80, 5, 0.2);
-                case "run":
-                    return new Animation(sprite, 112, 80, 6, 0.1);
-                case "attack":
-                    return new Animation(sprite, 112, 80, 8, 0.07);
-                default:
-                    return new Animation(sprite, 112, 80, 1, 1.0);
-            }
+                IsLooping = animData.IsLooping
+            };
         }
+
         private Level CreateDefaultLevel()
         {
             return new Level
             {
                 Platforms = new List<PlatformData>
             {
-                new PlatformData { X = 0, Y = 1040, Width = 4000, Height = 120, Type = "ground" },
-                //new PlatformData { X = 400, Y = 450, Width = 200, Height = 20, Type = "wood" },
-                //new PlatformData { X = 800, Y = 350, Width = 150, Height = 20, Type = "stone" }
+                new PlatformData { X = 0, Y = 1040, Width = 4000, Height = 120, Type = "ground" }
             }
             };
         }
 
         private BitmapImage LoadSprite(string filename)
         {
-            string fullPath = $"C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\{filename}";
+            string fullPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Player",
+    filename
+);
             return new BitmapImage(new Uri(fullPath));
         }
 
         private void InitializeGame()
         {
             backgroundManager = new BackgroundManager(GameCanvas);
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer4.png", 0);
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer1.png", 0);
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer5.png", 0);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer2.png", 0);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer6.png", -0.1);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer3.png", -0.2);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer7.png", -0.2);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer9.png", -0.4);//
-            backgroundManager.AddLayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\bg_layer8.png", 0);
 
             gameTimer = new GameTimer();
             gameTimer.Update += GameUpdate;
@@ -241,6 +553,17 @@ namespace WpfGame
 
         private void GameUpdate(double deltaTime)
         {
+            if (isTransitioning) return;
+            if (player.IsDead)
+            {
+                if (player.deathAnimationStarted)
+                {
+                    player.Update(deltaTime, platforms, entities);
+                    GameRender();
+                    ShowDeathEffects();
+                }
+                return;
+            }
             player.Update(deltaTime, platforms, entities);
             soundManager.UpdateAttack(player.Attack);
             UpdateCamera();
@@ -253,7 +576,7 @@ namespace WpfGame
                 if (entities[i].IsDestroyed)
                 {
                     GameCanvas.Children.Remove(entities[i].Image);
-                    //GameCanvas.Children.Remove(entities[i].HitboxVisual);
+                    GameCanvas.Children.Remove(entities[i].HitboxVisual);
                     entities.RemoveAt(i);
                 }
             }
@@ -267,20 +590,138 @@ namespace WpfGame
                 {
                     items.Remove(item);
                     GameCanvas.Children.Remove(item.Image);
-                    //GameCanvas.Children.Remove(item.HitboxVisual);
+                    GameCanvas.Children.Remove(item.HitboxVisual);
                 }
                 // Если подобран
                 if (item.IsCollected)
                 {
                     items.Remove(item);
                     GameCanvas.Children.Remove(item.Image);
-                    //GameCanvas.Children.Remove(item.HitboxVisual);
+                    GameCanvas.Children.Remove(item.HitboxVisual);
                 }
             }
             foreach (var enemy in enemies)
             {
-                enemy.Update(deltaTime);
+                enemy.Update(deltaTime, platforms, entities);
             }
+
+            // Проверка перехода на новый уровень
+            if (levelExit != null && player.GetPlayerRect().IntersectsWith(levelExit.Bounds))
+            {
+                bool allEnemiesDead = enemies.All(e => e.IsDead);
+
+                if (allEnemiesDead)
+                {
+                    StartFadeOut();
+                }
+                else
+                {
+                    // Показать сообщение "Убить всех врагов!"
+                }
+            }
+        }
+
+        private void ShowDeathEffects()
+        {
+            // Анимация затемнения экрана
+            var overlayAnim = new DoubleAnimation(0.7, TimeSpan.FromSeconds(1.5));
+            DeathOverlay.BeginAnimation(OpacityProperty, overlayAnim);
+
+            // Анимация текста (только появление)
+            var textAnim = new DoubleAnimation(1, TimeSpan.FromSeconds(1.5));
+            DeathText.BeginAnimation(OpacityProperty, textAnim);
+        }
+
+        private void ShowLevelUpPanel()
+        {
+            if (player.IsDead) return;
+
+            isLevelUpOpen = true;
+            LevelUpPanel.Visibility = Visibility.Visible;
+            pendingSkillPoints = player.AvailableSkillPoints;
+
+            // Обновляем значения
+            HealthStat.Text = player.BaseMaxHealth.ToString();
+            StaminaStat.Text = player.BaseMaxStamina.ToString("0");
+            DamageStat.Text = player.BaseDamage.ToString();
+            SpeedStat.Text = player.BaseSpeed.ToString("0.0");
+
+            // Сбрасываем бонусы
+            HealthBonus.Text = "";
+            StaminaBonus.Text = "";
+            DamageBonus.Text = "";
+            SpeedBonus.Text = "";
+
+            UpdateSkillPointsDisplay();
+            UpdatePlusButtons();
+        }
+        private void UpdateSkillPointsDisplay()
+        {
+            SkillPointsText.Text = $"Очков: {pendingSkillPoints}";
+            ApplyButton.IsEnabled = pendingSkillPoints < player.AvailableSkillPoints;
+        }
+
+        private void UpdatePlusButtons()
+        {
+            bool hasPoints = pendingSkillPoints > 0;
+            HealthPlus.IsEnabled = hasPoints;
+            StaminaPlus.IsEnabled = hasPoints;
+            DamagePlus.IsEnabled = hasPoints;
+            SpeedPlus.IsEnabled = hasPoints;
+        }
+        private void StatPlus_Click(object sender, RoutedEventArgs e)
+        {
+            var button = (Button)sender;
+            string stat = (string)button.Tag;
+
+            player.AddTempBonus(stat);
+            pendingSkillPoints--;
+
+            // Обновляем отображение бонусов
+            switch (stat)
+            {
+                case "Health":
+                    HealthBonus.Text = $"(+{player.tempHealthBonus})";
+                    HealthStat.Text = (player.BaseMaxHealth + player.tempHealthBonus).ToString();
+                    break;
+                case "Stamina":
+                    StaminaBonus.Text = $"(+{player.tempStaminaBonus})";
+                    StaminaStat.Text = (player.BaseMaxStamina + player.tempStaminaBonus).ToString("0");
+                    break;
+                case "Damage":
+                    DamageBonus.Text = $"(+{player.tempDamageBonus})";
+                    DamageStat.Text = (player.BaseDamage + player.tempDamageBonus).ToString();
+                    break;
+                case "Speed":
+                    SpeedBonus.Text = $"(+{player.tempSpeedBonus:0.0})";
+                    SpeedStat.Text = (player.BaseSpeed + player.tempSpeedBonus).ToString("0.0");
+                    break;
+            }
+
+            UpdateSkillPointsDisplay();
+            UpdatePlusButtons();
+        }
+
+        private void ApplyLevelUp_Click(object sender, RoutedEventArgs e)
+        {
+            player.AvailableSkillPoints -= (player.AvailableSkillPoints - pendingSkillPoints);
+            player.ApplyLevelUp();
+            //CloseLevelUpPanel();
+        }
+
+        private void CloseLevelUp_Click(object sender, RoutedEventArgs e)
+        {
+            CloseLevelUpPanel();
+        }
+
+        private void CloseLevelUpPanel()
+        {
+            isLevelUpOpen = false;
+            LevelUpPanel.Visibility = Visibility.Collapsed;
+            player.tempHealthBonus = 0;
+            player.tempStaminaBonus = 0;
+            player.tempDamageBonus = 0;
+            player.tempSpeedBonus = 0;
         }
 
         private void UpdateCamera()
@@ -301,6 +742,10 @@ namespace WpfGame
             // Плавное движение камеры
             cameraTransform.X += (targetX - cameraTransform.X) * CameraFollowSpeed;
             cameraTransform.Y += (targetY - cameraTransform.Y) * CameraFollowSpeed;
+
+            // Обновляем позицию затемнения
+            Canvas.SetLeft(BlackOverlay, -cameraTransform.X / CameraZoom);
+            Canvas.SetTop(BlackOverlay, -cameraTransform.Y / CameraZoom);
         }
 
         private double Clamp(double value, double min, double max)
@@ -327,7 +772,7 @@ namespace WpfGame
             Player.Source = player.CurrentAnimation.GetCurrentFrame(!player.FacingRight);
 
             // Обновление здоровья
-            double healthPercent = player.Health / 100.0;
+            double healthPercent = player.Health / (double)player.BaseMaxHealth;
             double maxMainWidth = 298 - 2; // 296px
             double currentMainWidth = maxMainWidth * healthPercent;
 
@@ -347,7 +792,7 @@ namespace WpfGame
             geometry.Figures.Add(figure);
             HealthBarInner.Data = geometry;
             // Обновление стамины
-            double staminaPercent = player.Stamina / player.MaxStamina;
+            double staminaPercent = player.Stamina / player.BaseMaxStamina;
             double maxStaminaWidth = 198 - 2; // 196px
             double currentStaminaWidth = maxStaminaWidth * staminaPercent;
 
@@ -369,6 +814,45 @@ namespace WpfGame
             StaminaBarInner.Data = staminaGeometry;
 
             UpdateInventoryUI();
+            UpdateLevelUI();
+        }
+
+        private void UpdateLevelUI()
+        {
+            // Текст уровня
+            LevelText.Text = player.Level.ToString();
+
+            // Рассчитываем угол для шкалы опыта
+            double expPercent = (double)player.Experience / player.RequiredExperience;
+            double angle = 360 * expPercent;
+
+            // Создаем геометрию для заполнения
+            var geometry = new PathGeometry();
+            var figure = new PathFigure
+            {
+                StartPoint = new Point(40, 5), // Верхняя точка круга
+                IsClosed = false
+            };
+
+            // Добавляем дугу
+            figure.Segments.Add(new ArcSegment(
+                point: CalculatePoint(angle),
+                size: new Size(35, 35),
+                rotationAngle: 0,
+                isLargeArc: angle > 180,
+                sweepDirection: SweepDirection.Clockwise,
+                isStroked: true));
+
+            geometry.Figures.Add(figure);
+            ExperienceBar.Data = geometry;
+        }
+
+        private Point CalculatePoint(double angle)
+        {
+            double radians = (angle - 90) * Math.PI / 180; // Смещаем начало на 12 часов
+            double x = 40 + 35 * Math.Cos(radians);
+            double y = 40 + 35 * Math.Sin(radians);
+            return new Point(x, y);
         }
 
         private void UpdateInventoryUI()
@@ -412,25 +896,26 @@ namespace WpfGame
             foreach (var item in items)
             {
                 // Временная подсветка предметов
-                //item.HitboxVisual.Stroke = Brushes.Lime;
-                //item.HitboxVisual.StrokeThickness = 3;
+                item.HitboxVisual.Stroke = Brushes.Lime;
+                item.HitboxVisual.StrokeThickness = 3;
                 // Отладочный вывод позиций
                 Console.WriteLine($"Item position: {item.Position.X}, {item.Position.Y}");
-                //Console.WriteLine($"Canvas coords: {Canvas.GetLeft(item.HitboxVisual)}, {item.Position.X + cameraTransform.X}, {item.Position.Y + cameraTransform.Y}");
+                Console.WriteLine($"Canvas coords: {Canvas.GetLeft(item.HitboxVisual)}, {item.Position.X + cameraTransform.X}, {item.Position.Y + cameraTransform.Y}");
 
                 item.UpdatePosition(cameraTransform.X, cameraTransform.Y);
 
-                //Canvas.SetLeft(item.HitboxVisual, item.Position.X);
-                //Canvas.SetTop(item.HitboxVisual, item.Position.Y);
+                Canvas.SetLeft(item.HitboxVisual, item.Position.X);
+                Canvas.SetTop(item.HitboxVisual, item.Position.Y);
             }
         }
 
         private void CheckInput()
         {
+            if (player.IsDead) return;
             player.MoveLeft = Keyboard.IsKeyDown(Key.A);
             player.MoveRight = Keyboard.IsKeyDown(Key.D);
             player.Jump = Keyboard.IsKeyDown(Key.Space);
-            player.Attack = player.Attack = !player.staminaBlocked && Keyboard.IsKeyDown(Key.J);
+            player.Attack = player.isAttacking;
             if (Keyboard.IsKeyDown(Key.Q))
             {
                 player.UseMainItem();
@@ -449,6 +934,42 @@ namespace WpfGame
         {
             if (e.Key == Key.Escape)
                 Close();
+            if (!GameStarted) { return; }
+            if (e.Key == Key.E && !isLevelUpOpen)
+            {
+                ShowLevelUpPanel();
+            }
+            if (e.Key == Key.H) // H - показать/скрыть хитбоксы
+            {
+                foreach (var enemy in enemies)
+                {
+                    enemy.HitboxVisual.Visibility =
+                        enemy.HitboxVisual.Visibility == Visibility.Collapsed
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                }
+                foreach (var entiti in entities)
+                {
+                    entiti.HitboxVisual.Visibility =
+                        entiti.HitboxVisual.Visibility == Visibility.Collapsed
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                }
+                foreach (var item in items)
+                {
+                    item.HitboxVisual.Visibility =
+                        item.HitboxVisual.Visibility == Visibility.Collapsed
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                }
+                foreach (var platform in platforms)
+                {
+                    platform.HitboxVisual.Visibility =
+                        platform.HitboxVisual.Visibility == Visibility.Collapsed
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                }
+            }
 
             //масштабирование камеры
             if (e.Key == Key.Add)
@@ -459,8 +980,26 @@ namespace WpfGame
             cameraScaleTransform.ScaleX = CameraZoom;
             cameraScaleTransform.ScaleY = CameraZoom;
         }
+        // обработчик клика на уровень
+        private void LevelText_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!isLevelUpOpen)
+            {
+                ShowLevelUpPanel();
+            }
+        }
 
         private void Window_KeyUp(object sender, KeyEventArgs e) { }
+    }
+
+    public class EnemyAnimationData
+    {
+        public string Texture { get; set; }
+        public int FrameWidth { get; set; } = 112;
+        public int FrameHeight { get; set; } = 80;
+        public int FramesCount { get; set; } = 1;
+        public double FrameDuration { get; set; } = 0.1;
+        public bool IsLooping { get; set; } = true;
     }
 
     public class BackgroundManager
@@ -473,15 +1012,45 @@ namespace WpfGame
             canvas = gameCanvas;
         }
 
-        public void AddLayer(string imagePath, double speedFactor, int tileCount = 6) //tileCount - кол-во повторений текстуры
+        public void LoadBackground(string configPath)
         {
-            var layer = new BackgroundLayer(imagePath, speedFactor, tileCount);
+            ClearExistingLayers();
+
+            if (!File.Exists(configPath))
+                throw new FileNotFoundException($"Background config not found: {configPath}");
+
+            var configJson = File.ReadAllText(configPath);
+            var config = JsonConvert.DeserializeObject<BackgroundConfig>(configJson);
+
+            foreach (var layerConfig in config.Layers.OrderBy(l => l.ZIndex))
+            {
+                AddLayer(layerConfig);
+            }
+        }
+
+        private void AddLayer(LayerConfig config)
+        {
+            string fullPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets\\Backgrounds", config.Texture);
+            var layer = new BackgroundLayer(fullPath, config.Speed, config.TileCount);
             layers.Add(layer);
 
             foreach (var img in layer.Tiles)
             {
+                Canvas.SetZIndex(img, config.ZIndex);
                 canvas.Children.Insert(0, img);
             }
+        }
+
+        private void ClearExistingLayers()
+        {
+            foreach (var layer in layers)
+            {
+                foreach (var tile in layer.Tiles)
+                {
+                    canvas.Children.Remove(tile);
+                }
+            }
+            layers.Clear();
         }
 
         public void Update(double playerPositionX)
@@ -491,6 +1060,18 @@ namespace WpfGame
                 layer.Update(playerPositionX);
             }
         }
+    }
+    public class BackgroundConfig
+    {
+        public List<LayerConfig> Layers { get; set; } = new List<LayerConfig>();
+    }
+
+    public class LayerConfig
+    {
+        public string Texture { get; set; }
+        public double Speed { get; set; }
+        public int TileCount { get; set; } = 6;
+        public int ZIndex { get; set; } = 0;
     }
 
     public class BackgroundLayer
@@ -539,9 +1120,10 @@ namespace WpfGame
 
     public class Level
     {
+        public string BackgroundConfig { get; set; } = "default_bg.json";
         public List<PlatformData> Platforms { get; set; } = new List<PlatformData>();
         public List<EntityData> Entities { get; set; } = new List<EntityData>();
-        public List<EnemyData> Enemies { get; set; } = new List<EnemyData>();
+        public List<EnemyInLevel> Enemies { get; set; } = new List<EnemyInLevel>();
     }
 
     public class PlatformData
@@ -555,18 +1137,43 @@ namespace WpfGame
 
     public class Player
     {
+        // базовые характеристики
+        [JsonProperty]
+        public int Level { get; set; } = 1;
+        [JsonProperty]
+        public double Experience { get; set; }
+        [JsonProperty]
+        public int BaseMaxHealth { get; set; } = 100;
+        [JsonProperty]
+        public double BaseMaxStamina { get; set; } = 100;
+        [JsonProperty]
+        public int BaseDamage { get; set; } = 10;
+        [JsonProperty]
+        public double BaseSpeed { get; set; } = 8;
+        // значения для прокачки
+        public int tempHealthBonus;
+        public int tempStaminaBonus;
+        public int tempDamageBonus;
+        public double tempSpeedBonus;
+
+        public int Health { get; set; }
+        public double Stamina { get; set; }
+        public int Damage => BaseDamage + tempDamageBonus;
+        public double MoveSpeed => BaseSpeed + tempSpeedBonus;
+
         private SoundManager soundManager;
         private bool wasJumping;
         public Point Position { get; set; }
         public Size Size { get; } = new Size(30, 115); // Соответствует реальному размеру спрайта персонажа 128 160 70
-        public int Health { get; set; } = 100; // здоровье
-        public double Stamina { get; private set; } = 100; //выносливость
+        public bool IsDead { get; private set; }
+        private bool deathAnimationPlayed;
+        public bool deathAnimationStarted;
         public double MaxStamina { get; } = 100;
-        private const double StaminaCost = 35; // Расход за атаку
+        private const double StaminaCost = 30; // Расход за атаку
         private const double StaminaRegen = 2; // Восстановление в секунду
         public bool staminaBlocked = false;
-        public Item MainItem { get; private set; }
-        public Item SecondaryItem { get; private set; }
+        public Item MainItem { get;set; }
+        public Item SecondaryItem { get;set; }
         private double _speedMultiplier = 1.0;
         private DateTime _speedBoostEndTime;
         private DateTime _lastSwapTime = DateTime.MinValue;
@@ -586,15 +1193,21 @@ namespace WpfGame
         public bool Jump { get; set; }
         public bool Attack { get; set; }
 
+        public bool isAttacking = false;
+        private double attackTimer = 0.0;
+        private const double attackDuration = 0.5; // Длительность атаки в секундах
+        private bool attackStarted = false;
+
         private DateTime lastAttackTime;
-        private const double AttackCooldown = 0.5; // 0.5 секунд между атаками
+        private const double AttackCooldown = attackDuration;
 
         private readonly Dictionary<string, Animation> animations;
         private readonly List<Item> worldItems;
         private readonly Canvas gameCanvas;
-        private const double MoveSpeed = 8;
         private const double JumpForce = -10;
         private const double Gravity = 0.8;
+        public int RequiredExperience => 25 * (int)Math.Pow(2, Level); //50 100 200 400 
+        public int AvailableSkillPoints { get; set; }
 
         public Player(Point startPosition, Dictionary<string, Animation> animations, SoundManager soundManager, List<Item> items, Canvas canvas)
         {
@@ -604,10 +1217,81 @@ namespace WpfGame
             this.soundManager = soundManager;
             this.worldItems = items;
             this.gameCanvas = canvas;
+
+            // Инициализация здоровья и стамины
+            Health = BaseMaxHealth;
+            Stamina = BaseMaxStamina;
+        }
+
+        public void UpdatePosition()
+        {
+            // Сбрасываем временные модификаторы
+            _speedMultiplier = 1.0;
+            _speedBoostEndTime = DateTime.MinValue;
+
+            // Сбрасываем анимации
+            CurrentAnimation = animations["idle"];
+            CurrentAnimation.Reset();
+        }
+        public void ResetState()
+        {
+            // Сброс временных состояний
+            Health = BaseMaxHealth;
+            Stamina = BaseMaxStamina;
+            _velocity = new Vector(0, 0);
+            IsDead = false;
+            deathAnimationStarted = false;
+            CurrentAnimation = animations["idle"];
+            CurrentAnimation.Reset();
+        }
+
+        private void CheckDeath()
+        {
+            if (Health <= 0 && !IsDead)
+            {
+                IsDead = true;
+                deathAnimationStarted = true;
+                CurrentAnimation = animations["dead"];
+                CurrentAnimation.Reset();
+                Velocity = new Vector(0, JumpForce / 2); // Небольшой подброс
+                soundManager.PlayDeath();
+            }
         }
 
         public void Update(double deltaTime, List<Platform> platforms, List<Entity> entities)
         {
+            if (IsDead)
+            {
+                ApplyPhysics(deltaTime);
+                CheckCollisions(platforms, entities);
+
+                CurrentAnimation.Update(deltaTime);
+                // Проверяем завершение анимации
+                if (deathAnimationStarted && CurrentAnimation.CurrentFrame >= CurrentAnimation.FramesCount - 1)
+                {
+                    deathAnimationStarted = false;
+                }
+                return;
+            }
+
+            // Обновление таймера атаки
+            if (isAttacking)
+            {
+                attackTimer -= deltaTime;
+                if (attackTimer <= 0)
+                {
+                    isAttacking = false;
+                }
+            }
+
+            // Обработка начала атаки
+            if (attackStarted)
+            {
+                HandleAttack(entities);
+                attackStarted = false;
+            }
+
+            CheckDeath();
             UpdateStamina(deltaTime);
             HandleInput();
             ApplyPhysics(deltaTime);
@@ -646,6 +1330,7 @@ namespace WpfGame
             if (staminaBlocked) return;//если устал
             Rect attackArea = GetAttackArea();
 
+            // Атака по Entity
             foreach (var entity in entities.ToArray())
             {
                 if (entity.IsDestroyed ||
@@ -654,6 +1339,14 @@ namespace WpfGame
 
                 entity.Destroy(worldItems, gameCanvas);
                 entities.Remove(entity);
+            }
+            // Атака по врагам
+            foreach (var enemy in ((MainWindow)Application.Current.MainWindow).enemies.ToArray())
+            {
+                if (enemy.Bounds.IntersectsWith(attackArea) && enemy.Health > 0)
+                {
+                    enemy.TakeDamage(Damage);
+                }
             }
         }
 
@@ -674,9 +1367,15 @@ namespace WpfGame
 
         private void HandleInput()
         {
+            if (isAttacking)
+            {
+                // Блокируем управление во время атаки
+                Velocity = new Vector(0, Velocity.Y);
+                return;
+            }
+
             var velocity = Velocity;
             velocity.X = 0;
-            //MoveSpeed = 8 * _speedMultiplier;
 
             if (MoveLeft)
             {
@@ -695,6 +1394,14 @@ namespace WpfGame
                 IsGrounded = false;
             }
             wasJumping = Jump;
+            // Начало атаки
+            if (Keyboard.IsKeyDown(Key.J) && !staminaBlocked && (DateTime.Now - lastAttackTime).TotalSeconds >= AttackCooldown)
+            {
+                isAttacking = true;
+                attackTimer = attackDuration;
+                lastAttackTime = DateTime.Now;
+                attackStarted = true;
+            }
             Velocity = velocity;
         }
 
@@ -703,10 +1410,23 @@ namespace WpfGame
             if (MainItem == null) return;
 
             // Определяем тип предмета по текстуре
+            // зелье скорости
             if (MainItem.Texture.UriSource.ToString().Contains("speed_potion.png"))
             {
                 _speedMultiplier = 1.5;
                 _speedBoostEndTime = DateTime.Now.AddMinutes(1);
+                soundManager.PlayPotionUse();
+            }
+            // зелье здоровья
+            else if (MainItem.Texture.UriSource.ToString().Contains("health_potion.png"))
+            {
+                Health = Math.Min(BaseMaxHealth, Health + 70);
+                soundManager.PlayPotionUse();
+            }
+            // зелье выносливости
+            else if (MainItem.Texture.UriSource.ToString().Contains("stamina_potion.png"))
+            {
+                Stamina = Math.Min(BaseMaxStamina, Stamina + 70);
                 soundManager.PlayPotionUse();
             }
 
@@ -747,7 +1467,7 @@ namespace WpfGame
             CheckEntityCollisions(entities, playerRect);
         }
 
-        private Rect GetPlayerRect()
+        public Rect GetPlayerRect()
         {
             return new Rect(
                 Position.X - Size.Width / 2,
@@ -866,30 +1586,83 @@ namespace WpfGame
 
         private void UpdateAnimationState()
         {
-            soundManager.UpdateRunning(IsGrounded && Velocity.X != 0 && !Attack);
-            soundManager.UpdateAttack(Attack);
+
+            if (IsDead)
+            {
+                CurrentAnimation = animations["dead"];
+                return;
+            }
 
             if (Attack)
             {
-                //new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\attack.wav").Play();
                 CurrentAnimation = animations["attack"];
-
-                //CurrentAnimation.Reset(); // Добавляем сброс анимации
+                return;
             }
             else if (!IsGrounded)
             {
                 CurrentAnimation = animations["jump"];
-                //CurrentAnimation.Reset();
             }
             else if (Velocity.X != 0)
             {
-                //new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\run.wav").Play();
                 CurrentAnimation = animations["run"];
 
             }
             else
             {
                 CurrentAnimation = animations["idle"];
+            }
+
+            soundManager.UpdateRunning(IsGrounded && Velocity.X != 0 && !Attack);
+            soundManager.UpdateAttack(Attack);
+        }
+
+        public void AddExperience(double amount)
+        {
+            if (IsDead) return;
+
+            Experience += amount;
+
+            while (Experience >= RequiredExperience)
+            {
+                Experience -= RequiredExperience;
+                Level++;
+                AvailableSkillPoints++;
+
+                // добавить эффект нового уровня
+            }
+        }
+
+        public void ApplyLevelUp()
+        {
+            BaseMaxHealth += tempHealthBonus;
+            BaseMaxStamina += tempStaminaBonus;
+            BaseDamage += tempDamageBonus;
+            BaseSpeed += tempSpeedBonus;
+
+            Health = BaseMaxHealth;
+            Stamina = BaseMaxStamina;
+
+            tempHealthBonus = 0;
+            tempStaminaBonus = 0;
+            tempDamageBonus = 0;
+            tempSpeedBonus = 0;
+        }
+        public void AddTempBonus(string stat)
+        {
+            switch (stat)
+            {
+                case "Health":
+                    tempHealthBonus += 20;
+                    break;
+                case "Stamina":
+                    tempStaminaBonus += 20;
+                    break;
+                case "Damage":
+                    tempDamageBonus += 5;
+                    break;
+                case "Speed":
+                    tempSpeedBonus += 1;
+                    break;
             }
         }
     }
@@ -902,22 +1675,32 @@ namespace WpfGame
         private readonly SoundPlayer attackSound;
         private readonly SoundPlayer potionSound;
         private readonly SoundPlayer swapSound;
+        private readonly SoundPlayer deathSound;
 
         private bool isRunning;
         private bool isAttacking;
 
         public SoundManager()
         {
+            string selfpath = "Assets\\Player\\";
             // Загрузка звуков
-            jumpSound = new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\jump.wav");
-            runSound = new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\run.wav");
-            attackSound = new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\attack.wav");
+            jumpSound = new SoundPlayer(selfpath + "jump.wav");
+            runSound = new SoundPlayer(selfpath + "run.wav");
+            attackSound = new SoundPlayer(selfpath + "attack.wav");
+            deathSound = new SoundPlayer(selfpath + "dead.wav");
 
-            potionSound = new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\potion_sound.wav");
-            swapSound = new SoundPlayer("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Player\\swap_sound.wav");
+            potionSound = new SoundPlayer(selfpath + "potion_sound.wav");
+            swapSound = new SoundPlayer(selfpath + "swap_sound.wav");
 
             // Настройка фоновой музыки
-            backgroundPlayer.Open(new Uri("C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\background.mp3", UriKind.Relative));
+            string bgMusicPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Backgrounds",
+    "BG1",
+    "background.mp3"
+);
+            backgroundPlayer.Open(new Uri(bgMusicPath, UriKind.Absolute));
             backgroundPlayer.MediaEnded += (s, e) => backgroundPlayer.Position = TimeSpan.Zero;
         }
 
@@ -964,6 +1747,12 @@ namespace WpfGame
                 isAttacking = false;
             }
         }
+
+        public void PlayDeath()
+        {
+            backgroundPlayer.Stop();
+            deathSound.Play();
+        }
     }
 
     public class Animation
@@ -977,10 +1766,18 @@ namespace WpfGame
         private double currentTime;
         private int currentFrame;
 
+        public int CurrentFrame => currentFrame;
+        public int FramesCount => framesCount;
+
+        public bool IsLooping { get; set; } = true;
+        public bool IsCompleted { get; private set; }
+
         public void Reset()
         {
             currentFrame = 0;
             currentTime = 0;
+            IsCompleted = false;
+
         }
 
         public Animation(BitmapSource sprite, int frameWidth, int frameHeight,
@@ -992,11 +1789,11 @@ namespace WpfGame
             this.framesCount = framesCount;
             this.frameDuration = frameDuration;
 
-            // Добавим проверку размеров
-            if (sprite.PixelWidth < frameWidth * framesCount)
-            {
-                throw new ArgumentException("Sprite sheet width is too small for specified frames");
-            }
+            // проверка размеров
+            //if (sprite.PixelWidth < frameWidth * framesCount)
+            //{
+            //    throw new ArgumentException("Sprite sheet width is too small for specified frames");
+            //}
         }
 
         public ImageSource GetCurrentFrame(bool flipHorizontal)
@@ -1062,10 +1859,24 @@ namespace WpfGame
 
         public void Update(double deltaTime)
         {
+            if (IsCompleted) return;
+
             currentTime += deltaTime;
             if (currentTime >= frameDuration)
             {
-                currentFrame = (currentFrame + 1) % framesCount;
+                currentFrame++;
+                if (currentFrame >= framesCount)
+                {
+                    if (IsLooping)
+                    {
+                        currentFrame = 0;
+                    }
+                    else
+                    {
+                        currentFrame = framesCount - 1;
+                        IsCompleted = true;
+                    }
+                }
                 currentTime = 0;
             }
         }
@@ -1084,38 +1895,41 @@ namespace WpfGame
     {
         public Rect Bounds { get; }
         public string Type { get; }
-        //public Rectangle HitboxVisual { get; } // Хитбокс для отладки
+        public Rectangle HitboxVisual { get; } // Хитбокс для отладки
 
         public Platform(Rect bounds, string type)
         {
             Bounds = bounds;
             Type = type;
 
-            // Визуализация хитбокса
-            //HitboxVisual = new Rectangle
-            //{
-            //    Width = bounds.Width,
-            //    Height = bounds.Height,
-            //    Stroke = Brushes.Blue,
-            //    StrokeThickness = 2,
-            //    Visibility = Visibility.Visible // Visible или Collapsed
-            //};
-            //Canvas.SetZIndex(HitboxVisual, 1000);
+            //Визуализация хитбокса
+            HitboxVisual = new Rectangle
+            {
+                Width = bounds.Width,
+                Height = bounds.Height,
+                Stroke = Brushes.Blue,
+                StrokeThickness = 2,
+                Visibility = Visibility.Collapsed // Visible или Collapsed
+            };
+            Canvas.SetZIndex(HitboxVisual, 1000);
         }
 
         public void UpdatePosition(double cameraX)
         {
-            //Canvas.SetLeft(HitboxVisual, Bounds.X);
-            //Canvas.SetTop(HitboxVisual, Bounds.Y);
+            Canvas.SetLeft(HitboxVisual, Bounds.X);
+            Canvas.SetTop(HitboxVisual, Bounds.Y);
         }
     }
 
+    [JsonObject(MemberSerialization.OptIn)]
     public class Item
     {
+        [JsonProperty]
+        public string TexturePath { get; private set; }
         public Point Position { get; set; }
         public Vector Velocity { get; set; } = new Vector(0, 0);
         public Image Image { get; }
-        //public Rectangle HitboxVisual { get; }
+        public Rectangle HitboxVisual { get; }
         public Rect Bounds => new Rect(Position.X, Position.Y, 30, 30);
         public bool IsDestroyed { get; private set; }
         public bool IsCollected { get; set; }
@@ -1130,12 +1944,13 @@ namespace WpfGame
             transform.X = Position.X;
             transform.Y = Position.Y;
 
-            //Canvas.SetLeft(HitboxVisual, Position.X);
-            //Canvas.SetTop(HitboxVisual, Position.Y);
+            Canvas.SetLeft(HitboxVisual, Position.X);
+            Canvas.SetTop(HitboxVisual, Position.Y);
         }
 
         public Item(Point position, string texturePath)
         {
+            TexturePath = texturePath;
             Position = position;
             Texture = new BitmapImage(new Uri(texturePath));
             // Загрузка текстуры с масштабированием до 40x40
@@ -1148,17 +1963,17 @@ namespace WpfGame
                 RenderTransform = new TranslateTransform()
             };
 
-            //// Хитбокс для отладки
-            //HitboxVisual = new Rectangle
-            //{
-            //    Width = 30,
-            //    Height = 30,
-            //    Stroke = Brushes.Green,
-            //    StrokeThickness = 1,
-            //    Visibility = Visibility.Visible
-            //};
+            // Хитбокс для отладки
+            HitboxVisual = new Rectangle
+            {
+                Width = 30,
+                Height = 30,
+                Stroke = Brushes.Green,
+                StrokeThickness = 1,
+                Visibility = Visibility.Collapsed
+            };
             Canvas.SetZIndex(Image, 200);
-            //Canvas.SetZIndex(HitboxVisual, 200);
+            Canvas.SetZIndex(HitboxVisual, 1000);
         }
 
         public void Update(List<Platform> platforms)
@@ -1209,7 +2024,7 @@ namespace WpfGame
         {
             IsDestroyed = true;
             Image.Visibility = Visibility.Collapsed;
-            //HitboxVisual.Visibility = Visibility.Collapsed;
+            HitboxVisual.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -1232,6 +2047,7 @@ namespace WpfGame
         public int ZIndex { get; set; } = 100; // Значение по умолчанию (как у игрока)
         public string DestructionSound { get; set; }
         public List<DropData> Drops { get; set; } = new List<DropData>();
+        public bool IsLevelExit { get; set; }
     }
 
     public class Entity
@@ -1240,7 +2056,7 @@ namespace WpfGame
         public Image Image { get; }
         public bool IsDestructible { get; }
         public bool IsCollidable { get; }
-        //public Rectangle HitboxVisual { get; } // Хитбокс для отладки
+        public Rectangle HitboxVisual { get; } // Хитбокс для отладки
         public int ZIndex { get; }
         public SoundPlayer DestructionSound { get; }
         public bool IsDestroyed { get; private set; }
@@ -1262,22 +2078,28 @@ namespace WpfGame
                 Height = bounds.Height,
                 RenderTransform = new TranslateTransform()
             };
-            //// Визуализация хитбокса
-            //HitboxVisual = new Rectangle
-            //{
-            //    Width = bounds.Width,
-            //    Height = bounds.Height,
-            //    Stroke = isCollidable ? Brushes.Red : Brushes.Yellow,
-            //    StrokeThickness = 2,
-            //    Visibility = Visibility.Visible // Для отключения: Visibility.Collapsed
-            //};
-            //Canvas.SetZIndex(HitboxVisual, zIndex);
+            // Визуализация хитбокса
+            HitboxVisual = new Rectangle
+            {
+                Width = bounds.Width,
+                Height = bounds.Height,
+                Stroke = isCollidable ? Brushes.Red : Brushes.Yellow,
+                StrokeThickness = 2,
+                Visibility = Visibility.Collapsed // Для отключения: Visibility.Collapsed
+            };
+            Canvas.SetZIndex(HitboxVisual, zIndex);
             Canvas.SetZIndex(Image, zIndex);
 
             // Загрузка звука
             if (!string.IsNullOrEmpty(destructionSound))
             {
-                string soundPath = $"C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Entities\\crate\\{destructionSound}";
+                string soundPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Entities",
+    "crate",
+    destructionSound
+);
                 DestructionSound = new SoundPlayer(soundPath);
             }
         }
@@ -1293,7 +2115,7 @@ namespace WpfGame
 
             // Помечаем для удаления
             Image.Visibility = Visibility.Collapsed;
-            //HitboxVisual.Visibility = Visibility.Collapsed;
+            HitboxVisual.Visibility = Visibility.Collapsed;
             // Генерация дропа
             foreach (var drop in drops)
             {
@@ -1308,12 +2130,17 @@ namespace WpfGame
                             Bounds.Y + Bounds.Height / 2 - 20
                         );
 
-                        string texturePath = $"C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Items\\{drop.Texture}";
+                        string texturePath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Items",
+    drop.Texture
+);
                         var item = new Item(itemPos, texturePath);
 
                         items.Add(item);
                         canvas.Children.Add(item.Image);
-                        //canvas.Children.Add(item.HitboxVisual);
+                        canvas.Children.Add(item.HitboxVisual);
                     }
                 }
             }
@@ -1325,8 +2152,8 @@ namespace WpfGame
             transform.X = Bounds.X;
             transform.Y = Bounds.Y;
 
-            //Canvas.SetLeft(HitboxVisual, Bounds.X);
-            //Canvas.SetTop(HitboxVisual, Bounds.Y);
+            Canvas.SetLeft(HitboxVisual, Bounds.X);
+            Canvas.SetTop(HitboxVisual, Bounds.Y);
         }
     }
 
@@ -1337,7 +2164,14 @@ namespace WpfGame
 
         public ParallaxLayer(string imagePath, double speedFactor)
         {
-            var uri = new Uri($"C:\\Users\\XOMA\\Documents\\GitHub\\projects-2024-2\\progr-sem-2\\Project2025-SS\\Assets\\Backgrounds\\BG1\\{imagePath}", UriKind.Absolute);
+            string fullPath = System.IO.Path.Combine(
+    AppDomain.CurrentDomain.BaseDirectory,
+    "Assets",
+    "Backgrounds",
+    "BG1",
+    imagePath
+);
+            var uri = new Uri(fullPath, UriKind.Absolute);
             Image = new BitmapImage(uri);
             SpeedFactor = speedFactor;
         }
@@ -1369,31 +2203,82 @@ namespace WpfGame
             Render?.Invoke();
         }
     }
-
-    public class EnemyData
+    public class EnemyInLevel
     {
         public string Type { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
-        public double Width { get; set; }
-        public double Height { get; set; }
-        public Dictionary<string, string> Animations { get; set; }
+    }
+    public class EnemyData
+    {
+        public double SpriteWidth { get; set; }
+        public double SpriteHeight { get; set; }
+        public double HitboxWidth { get; set; }
+        public double HitboxHeight { get; set; }
+        public double Speed { get; set; }
+        public double Damage { get; set; }
+        public double Health { get; set; }
+        public double AttackRange { get; set; }
+        public double DetectionRange { get; set; }
+        public double AttackCooldown { get; set; }
+        public Dictionary<string, EnemyAnimationData> Animations { get; set; }
     }
     public class Enemy
     {
+        public enum EnemyState
+        {
+            Idle, Chasing, Attacking,
+            Dead
+        }
+        public Rectangle HitboxVisual { get; } //хитбокс отладки
+        public EnemyState CurrentState { get; private set; }
+        public double Speed { get; }
+        public double Damage { get; }
+        public double Health { get; set; }
+        public bool IsDead => Health <= 0;
+        public bool IsDeath { get; private set; }
+        public double AttackRange { get; }
+        public double DetectionRange { get; }
+        public double AttackCooldown { get; }
+        private DateTime lastAttackTime = DateTime.MinValue;
+        private DateTime attackStartTime;
+        private bool isAttackInProgress;
+        private const double AttackWindupTime = 0.5; // Задержка перед уроном в секундах
+        private Player targetPlayer;
         public Point Position { get; set; }
-        public Size Size { get; }
+        public Size SpriteSize { get; }
+        public Size HitboxSize { get; }
+        public Size Size { get; } = new Size(224, 160);
         public Animation CurrentAnimation { get; private set; }
         public bool FacingRight { get; set; }
-        public Rect Bounds => new Rect(Position.X - Size.Width / 2, Position.Y - Size.Height / 2, Size.Width, Size.Height);
+        public Rect Bounds => new Rect(
+        Position.X - HitboxSize.Width / 2,
+        Position.Y - HitboxSize.Height / 2,
+        HitboxSize.Width,
+        HitboxSize.Height
+        );
 
         private readonly Dictionary<string, Animation> animations;
         private readonly Image image;
+        private const double Gravity = 0.8;
+        private const double MoveSpeed = 3;
+        public Vector Velocity { get; set; }
+        public bool IsGrounded { get; private set; }
+        private static MediaPlayer _hitSoundPlayer;
 
-        public Enemy(Point position, Dictionary<string, Animation> animations, string defaultAnimation)
+
+        public Enemy(Point position, Dictionary<string, Animation> animations, string defaultAnimation,
+               double spriteWidth, double spriteHeight, double hitboxWidth, double hitboxHeight,
+               double speed, double damage, double health, double attackRange, double detectionRange,
+               double attackCooldown, Player player)
         {
-            Position = position;
-            Size = new Size(224, 160); // Размеры скелета из JSON
+            SpriteSize = new Size(spriteWidth, spriteHeight);
+            HitboxSize = new Size(hitboxWidth, hitboxHeight);
+            Position = new Point(
+            position.X + hitboxWidth / 2,
+            position.Y + hitboxHeight / 2
+        );
+            //Size = new Size(224, 160); // Размеры скелета
             this.animations = animations;
             CurrentAnimation = animations[defaultAnimation];
 
@@ -1410,23 +2295,339 @@ namespace WpfGame
                 }
                 }
             };
+
+            Speed = speed;
+            Damage = damage;
+            Health = health;
+            AttackRange = attackRange;
+            DetectionRange = detectionRange;
+            AttackCooldown = attackCooldown;
+            targetPlayer = player;
+
+            // хитбок отладки
+            HitboxVisual = new Rectangle
+            {
+                Width = hitboxWidth,
+                Height = hitboxHeight,
+                Stroke = Brushes.Purple,
+                StrokeThickness = 2,
+                Fill = Brushes.Transparent,
+                Visibility = Visibility.Collapsed // Для отладки
+            };
+
+            Canvas.SetZIndex(HitboxVisual, 999); // Выше других объектов
+            Canvas.SetZIndex(image, 100);
         }
 
-        public void Update(double deltaTime)
+        public void Update(double deltaTime, List<Platform> platforms, List<Entity> entities)
         {
-            CurrentAnimation.Update(deltaTime);
-            image.Source = CurrentAnimation.GetCurrentFrame(!FacingRight);
+            if (IsDead)
+            {
+                if (!CurrentAnimation.IsCompleted)
+                {
+                    CurrentAnimation.Update(deltaTime);
+                    image.Source = CurrentAnimation.GetCurrentFrame(FacingRight);
+                }
+                return;
+            }
+            // Логика AI
+            UpdateAI(deltaTime);
 
-            // Обновление позиции на Canvas
+            // Обновление анимации
+            CurrentAnimation.Update(deltaTime);
+            image.Source = CurrentAnimation.GetCurrentFrame(FacingRight);
+
+            // Обновление позиции изображения
             var transform = (TransformGroup)image.RenderTransform;
             var translate = (TranslateTransform)transform.Children[0];
-            translate.X = Position.X - Size.Width / 2;
-            translate.Y = Position.Y - Size.Height / 2;
+            translate.X = Position.X - SpriteSize.Width / 2;
+            translate.Y = Position.Y - SpriteSize.Height / 2;
+
+            // Обновляем позицию хитбокса
+            Canvas.SetLeft(HitboxVisual, Position.X - HitboxSize.Width / 2);
+            Canvas.SetTop(HitboxVisual, Position.Y - HitboxSize.Height / 2);
+
+            // Физика
+            ApplyPhysics(deltaTime);
+            CheckCollisions(platforms, entities);
+        }
+
+        private void UpdateAI(double deltaTime)
+        {
+            if (IsDead || targetPlayer.IsDead) return;
+            if (targetPlayer == null) return;
+
+            double distanceToPlayer = CalculateDistanceToPlayer();
+            UpdateFacingDirection();
+
+            if (distanceToPlayer <= AttackRange)
+            {
+                CurrentState = EnemyState.Attacking;
+                AttackPlayer(deltaTime);
+            }
+            else if (distanceToPlayer <= DetectionRange)
+            {
+                CurrentState = EnemyState.Chasing;
+                ChasePlayer(deltaTime);
+            }
+            else
+            {
+                CurrentState = EnemyState.Idle;
+                Velocity = new Vector(0, Velocity.Y);
+            }
+
+            UpdateAnimationState();
+        }
+
+        private double CalculateDistanceToPlayer()
+        {
+            return Math.Abs(Position.X - targetPlayer.Position.X);
+        }
+
+        private void UpdateFacingDirection()
+        {
+            FacingRight = targetPlayer.Position.X > Position.X;
+        }
+
+        private void ChasePlayer(double deltaTime)
+        {
+            Vector velocity = Velocity;
+            int direction = FacingRight ? 1 : -1;
+            velocity.X = direction * Speed;
+            Velocity = velocity;
+        }
+
+        private void AttackPlayer(double deltaTime)
+        {
+            Velocity = new Vector(0, Velocity.Y);
+
+            if (!isAttackInProgress && CanAttack())
+            {
+                // Начало атаки
+                isAttackInProgress = true;
+                attackStartTime = DateTime.Now;
+                CurrentAnimation = animations["attack"];
+                CurrentAnimation.Reset();
+            }
+
+            if (isAttackInProgress)
+            {
+                // Проверяем задержку перед уроном
+                if ((DateTime.Now - attackStartTime).TotalSeconds >= AttackWindupTime)
+                {
+                    ApplyDamage();
+                    isAttackInProgress = false;
+                    lastAttackTime = DateTime.Now;
+                }
+            }
+        }
+        private void ApplyDamage()
+        {
+            // Наносим урон игроку
+            targetPlayer.Health = Math.Max(0, targetPlayer.Health - (int)Damage);
+            //soundManager.PlayEnemyAttack(); // звук атаки
+        }
+        private bool CanAttack()
+        {
+            return (DateTime.Now - lastAttackTime).TotalSeconds >= AttackCooldown;
+        }
+
+        private void UpdateAnimationState()
+        {
+
+            switch (CurrentState)
+            {
+                case EnemyState.Dead:
+                    if (CurrentAnimation != animations["dead"])
+                    {
+                        CurrentAnimation = animations["dead"];
+                        CurrentAnimation.Reset();
+                    }
+                    break;
+
+                case EnemyState.Attacking:
+                    if (CurrentAnimation != animations["attack"])
+                    {
+                        CurrentAnimation = animations["attack"];
+                        CurrentAnimation.Reset();
+                    }
+                    break;
+                case EnemyState.Chasing:
+                    CurrentAnimation = animations["run"];
+                    break;
+                default:
+                    CurrentAnimation = animations["idle"];
+                    break;
+            }
         }
 
         public void AddToCanvas(Canvas canvas)
         {
             canvas.Children.Add(image);
+            canvas.Children.Add(HitboxVisual); //хитбокс отладки
+        }
+        public void RemoveFromCanvas(Canvas canvas)
+        {
+            canvas.Children.Remove(image);
+            canvas.Children.Remove(HitboxVisual);
+        }
+
+        private void ApplyPhysics(double deltaTime)
+        {
+            var velocity = Velocity;
+            velocity.Y += Gravity;
+            Velocity = velocity;
+
+            Position = new Point(
+                Position.X + velocity.X,
+                Position.Y + velocity.Y
+            );
+        }
+
+        private void CheckCollisions(List<Platform> platforms, List<Entity> entities)
+        {
+            var enemyRect = Bounds;
+            IsGrounded = false;
+
+            // Коллизии с платформами
+            foreach (var platform in platforms)
+            {
+                if (enemyRect.IntersectsWith(platform.Bounds))
+                {
+                    HandleCollision(platform.Bounds);
+                }
+            }
+
+            // Коллизии с Entity
+            foreach (var entity in entities)
+            {
+                if (entity.IsCollidable && enemyRect.IntersectsWith(entity.Bounds))
+                {
+                    HandleCollision(entity.Bounds);
+                }
+            }
+        }
+        private void HandleCollision(Rect obstacleRect)
+        {
+            var enemyRect = Bounds;
+            double overlapX = Math.Min(enemyRect.Right, obstacleRect.Right) -
+                            Math.Max(enemyRect.Left, obstacleRect.Left);
+            double overlapY = Math.Min(enemyRect.Bottom, obstacleRect.Bottom) -
+                            Math.Max(enemyRect.Top, obstacleRect.Top);
+
+            if (overlapX > 0 && overlapY > 0)
+            {
+                if (overlapX < overlapY)
+                {
+                    // Горизонтальная коллизия
+                    if (enemyRect.Left < obstacleRect.Left)
+                    {
+                        Position = new Point(Position.X - overlapX, Position.Y);
+                    }
+                    else
+                    {
+                        Position = new Point(Position.X + overlapX, Position.Y);
+                    }
+                    Velocity = new Vector(0, Velocity.Y);
+                }
+                else
+                {
+                    // Вертикальная коллизия
+                    if (enemyRect.Top < obstacleRect.Top)
+                    {
+                        Position = new Point(Position.X, Position.Y - overlapY);
+                        Velocity = new Vector(Velocity.X, 0);
+                    }
+                    else
+                    {
+                        Position = new Point(Position.X, Position.Y + overlapY);
+                        Velocity = new Vector(Velocity.X, 0);
+                        IsGrounded = true;
+                    }
+                }
+            }
+        }
+
+        public void TakeDamage(int damage)
+        {
+            if (IsDead) return;
+
+            PlayHitSound();
+
+            Health = Math.Max(0, Health - damage);
+
+            if (IsDead)
+            {
+                Die();
+                ((MainWindow)Application.Current.MainWindow).player.AddExperience( ((Damage*AttackCooldown*2) + (Health/2) + (Speed*2))*4 );
+            }
+            else
+            {
+                // Анимация получения урона
+            }
+        }
+        private void PlayHitSound()
+        {
+            try
+            {
+                if (_hitSoundPlayer == null)
+                {
+                    string soundPath = System.IO.Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "Assets",
+                        "Player",
+                        "hit.mp3"
+                    );
+
+                    _hitSoundPlayer = new MediaPlayer();
+                    _hitSoundPlayer.Open(new Uri(soundPath, UriKind.Absolute));
+                    _hitSoundPlayer.MediaEnded += (s, e) =>
+                    {
+                        _hitSoundPlayer.Stop();
+                        _hitSoundPlayer.Position = TimeSpan.Zero;
+                    };
+                }
+
+                _hitSoundPlayer.Position = TimeSpan.Zero;
+                _hitSoundPlayer.Play();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка воспроизведения звука попадания: {ex.Message}");
+            }
+        }
+        private void Die()
+        {
+            IsDeath = true;
+            CurrentState = EnemyState.Dead;
+            CurrentAnimation = animations["dead"];
+            CurrentAnimation.IsLooping = false; // Отключаем зацикливание
+            CurrentAnimation.Reset();
+            Velocity = new Vector(0, 0);
+
+            // Отключаем коллизии
+            HitboxVisual.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    public class LevelExit
+    {
+        public Rect Bounds { get; }
+        public Rectangle Visual { get; }
+
+        public LevelExit(Rect bounds)
+        {
+            Bounds = bounds;
+            Visual = new Rectangle
+            {
+                Width = bounds.Width,
+                Height = bounds.Height,
+                Fill = Brushes.Transparent,
+                Stroke = Brushes.Cyan,
+                StrokeThickness = 3,
+                Visibility = Visibility.Collapsed
+            };
+            Canvas.SetZIndex(Visual, 999);
         }
     }
 }
